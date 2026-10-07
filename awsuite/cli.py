@@ -1,6 +1,7 @@
 """awsuite command line.
 
     awsuite auth login [--scopes mail,drive] [--write] [--client-secret client_secret.json]
+    awsuite auth login --workspace https://workspace.example.com --bearer-env TOK
     awsuite mail search "is:unread newer_than:2d"
     awsuite mail send --to a@b.com --subject Hi --body "..." --confirm
     awsuite drive push --query "q3 report" --to https://workspace.example.com --bearer-env TOK
@@ -161,6 +162,15 @@ def build_parser() -> argparse.ArgumentParser:
     lg.add_argument("--key", help="service-account: JSON key file.")
     lg.add_argument("--subject", help="service-account: user to impersonate (user@domain).")
     lg.add_argument("--token-cmd", help="token mode: command that prints an access token.")
+    lg.add_argument("--workspace", metavar="BASE_URL", default="",
+                    help="workspace mode: use the Google connection you made in this Aither "
+                         "workspace, e.g. https://workspace.example.com (implies "
+                         "--mode workspace).")
+    lg.add_argument("--bearer-env", metavar="NAME", default="",
+                    help="workspace mode: env var holding a workspace bearer. Omit it to "
+                         "use the Aither login `adk login` saved.")
+    lg.add_argument("--provider", choices=_auth.WORKSPACE_PROVIDERS, default="google",
+                    help="workspace mode: which workspace connection to borrow.")
     lg.add_argument("--timeout", type=float, default=300.0,
                     help="Seconds to wait for the browser redirect.")
     asub.add_parser("status", help="show the profile (tokens masked)")
@@ -222,10 +232,13 @@ def _auth_cmd(ns: argparse.Namespace, as_json: bool) -> int:
     prof = ns.profile or _auth.default_profile()
     if ns.auth_cmd == "login":
         svcs = _scopes.parse_services(ns.scopes)
-        st = _auth.login(prof, ns.mode, services=svcs, write=ns.write,
+        mode = "workspace" if ns.workspace else ns.mode
+        st = _auth.login(prof, mode, services=svcs, write=ns.write,
                          client_secret=ns.client_secret, open_browser=not ns.no_browser,
                          key_path=ns.key or "", subject=ns.subject or "",
                          token_cmd=ns.token_cmd or "", timeout=ns.timeout,
+                         workspace=ns.workspace, bearer_env=ns.bearer_env,
+                         provider=ns.provider,
                          printer=lambda s: print(s, file=sys.stderr))
         _emit(st, as_json)
         return 0

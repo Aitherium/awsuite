@@ -1,9 +1,9 @@
 """awsuite's own doctor checks (the generated `_doctor.py` calls the hooks here).
 
 Checks: Python version, profile token-file permissions, scopes granted vs
-requested, and whether the Google token endpoint answers within 5 s. Each check
-reports ok / warn / fail / unjudged -- an unreachable network is UNJUDGED, never
-a silent pass.
+requested, a workspace-mode profile's bearer variable, and whether the Google
+token endpoint answers within 5 s. Each check reports ok / warn / fail /
+unjudged -- an unreachable network is UNJUDGED, never a silent pass.
 """
 
 from __future__ import annotations
@@ -35,7 +35,9 @@ def _check_profiles() -> List[Dict[str, str]]:
                     "status": "ok" if env else "fail",
                     "detail": ("no profile file; using the platform token from the environment"
                                if env else
-                               f"no profile in {_auth.home()}; run `awsuite auth login`")})
+                               f"no profile in {_auth.home()}; run `awsuite auth login` "
+                               f"(or reuse a workspace's Google connection: `awsuite auth "
+                               f"login --workspace <url> --bearer-env NAME`)")})
         return out
     for name in names:
         path = _auth.profile_path(name)
@@ -54,6 +56,14 @@ def _check_profiles() -> List[Dict[str, str]]:
         except Exception as exc:  # noqa: BLE001 - doctor reports, never crashes
             out.append({"name": f"scopes:{name}", "status": "fail", "detail": str(exc)})
             continue
+        if st.get("mode") == "workspace":
+            env = st.get("bearer_env") or ""
+            have = bool(env and os.environ.get(env, "").strip())
+            out.append({"name": f"workspace:{name}", "status": "ok" if have else "warn",
+                        "detail": f"borrows the Google connection of {st.get('workspace')}; "
+                                  f"bearer from ${env or '(none)'} "
+                                  + ("(set)" if have else "(NOT set: export it before a call)")
+                                  + "; an admin must allow CLI hand-off in Connectors"})
         missing = st.get("missing_scopes") or []
         if st.get("scopes_granted") is None:
             out.append({"name": f"scopes:{name}", "status": "warn",

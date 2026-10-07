@@ -1,4 +1,4 @@
-"""Authentication: three modes, one `TokenSource` interface.
+"""Authentication: four modes, one `TokenSource` interface.
 
 * ``oauth`` (default) -- the installed-app loopback flow with PKCE (RFC 7636,
   S256). A tiny `http.server` listens on 127.0.0.1 at an ephemeral port, the
@@ -11,6 +11,11 @@
 * ``token`` -- an access token handed in by a platform: ``AWSUITE_ACCESS_TOKEN``
   or ``--token-cmd`` (a command that prints one). The brick then never holds a
   refresh credential at all, which is the point of the mode.
+* ``workspace`` -- borrow the Google connection you already made in an Aither
+  workspace. Each fetch asks ``GET <base>/api/connectors/<provider>/token`` with
+  your workspace session bearer (read from an environment variable you NAME, so
+  only the variable's name is stored) and caches the answer in memory until just
+  before it expires. No second OAuth client, no refresh token on this machine.
 
 Token values are never printed. `mask()` is the only way a token reaches output.
 """
@@ -42,7 +47,11 @@ AUTH_URI = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 REVOKE_URI = "https://oauth2.googleapis.com/revoke"
 
-MODES = ("oauth", "service-account", "token")
+MODES = ("oauth", "service-account", "token", "workspace")
+
+#: Connector providers a workspace can hand a token for (awsuite speaks Google).
+WORKSPACE_PROVIDERS = ("google",)
+WORKSPACE_TOKEN_PATH = "/api/connectors/{provider}/token"
 
 #: Refresh this many seconds before the recorded expiry, so a token never dies
 #: mid-request.
@@ -557,6 +566,173 @@ class CommandTokenSource(TokenSource):
         return d
 
 
+_LOOPBACK = ("127.0.0.1", "localhost", "::1")
+
+
+def check_workspace_base(base: str) -> str:
+    """Normalise and vet a workspace base URL: https, or http only to loopback.
+
+    Raises:
+        ConfigError: not a URL, or plain http to a non-loopback host.
+    """
+    u = urllib.parse.urlparse((base or "").strip())
+    if u.scheme not in ("https", "http") or not u.netloc:
+        raise ConfigError(f"--workspace must be a URL like https://workspace.example.com, "
+                          f"got {base!r}")
+    if u.scheme == "http" and u.hostname not in _LOOPBACK:
+        raise ConfigError("refusing to send a workspace session over plain http to a "
+                          "non-loopback host; use https")
+    return base.strip().rstrip("/")
+
+
+def adk_login_token() -> str:
+    """The Aither Identity token `adk login` saved (~/.aither/auth.json, active profile).
+
+    Read-only, stdlib-only, and never copied anywhere: awsuite only sends it to the
+    workspace you named. The local-root profile `adk` provisions on a fresh install is
+    not an Identity login, so it does not count. ``AWSUITE_ADK_AUTH_FILE`` overrides the
+    path (tests, unusual homes).
+    """
+    path = Path(os.environ.get("AWSUITE_ADK_AUTH_FILE")
+                or (Path.home() / ".aither" / "auth.json"))
+    try:
+        store = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(store, dict):
+        return ""
+    active = store.get("active_profile") or ""
+    prof = (store.get("profiles") or {}).get(active) or {}
+    if active in ("", "local") or not isinstance(prof, dict):
+        return ""
+    return str(prof.get("access_token") or "").strip()
+
+
+def _env_name_ok(name: str) -> bool:
+    return bool(name) and all(c.isalnum() or c == "_" for c in name) and not name[0].isdigit()
+
+
+class WorkspaceTokenSource(TokenSource):
+    """`workspace` mode: borrow the caller's own connection from an Aither workspace.
+
+    The workspace answers only for the signed-in member (never anyone else), and
+    only when a workspace admin has turned the CLI hand-off on. The bearer is
+    read from the NAMED environment variable on every fetch; neither it nor the
+    access token is ever written to disk or printed.
+    """
+
+    mode = "workspace"
+
+    def __init__(self, base: str, bearer_env: str, provider: str = "google",
+                 now: Callable[[], float] = time.time, ttl: float = 300.0) -> None:
+        self.base = check_workspace_base(base)
+        self.bearer_env = bearer_env
+        self.provider = provider
+        self._now = now
+        self._ttl = ttl
+        self._tok: Optional[str] = None
+        self._exp = 0.0
+        self._scopes: Optional[Set[str]] = None
+
+    @property
+    def url(self) -> str:
+        return self.base + WORKSPACE_TOKEN_PATH.format(provider=self.provider)
+
+    def _bearer(self) -> str:
+        if not self.bearer_env:
+            # No variable named: use the Aither login `adk login` already holds.
+            val = adk_login_token()
+            if not val:
+                raise AuthError("workspace mode: no Aither login found -- run `adk login` "
+                                "(or pass --bearer-env NAME)")
+            return val
+        val = os.environ.get(self.bearer_env, "").strip()
+        if val.lower().startswith("bearer "):
+            val = val[7:].strip()
+        if not val:
+            raise AuthError(f"workspace mode: environment variable {self.bearer_env} "
+                            f"is empty or unset; export your workspace session bearer in it")
+        return val
+
+    def _refused(self, code: int, body: bytes) -> AuthError:
+        try:
+            j = json.loads(body or b"{}")
+        except ValueError:
+            j = {}
+        if not isinstance(j, dict):
+            j = {}
+        detail = str(j.get("detail") or "")[:300]
+        if code == 401:
+            return AuthError(f"the workspace refused the bearer in ${self.bearer_env} (401): "
+                             f"sign in to the workspace again and refresh it", 401)
+        if code == 403:
+            return AuthError(f"the workspace refused the token hand-off (403): "
+                             f"{detail or 'forbidden'}. A workspace admin must enable CLI "
+                             f"hand-off for this connection (Connectors)", 403)
+        if code == 404:
+            connect = str(j.get("connect_url") or f"/api/auth/{self.provider}/login")
+            if not connect.startswith("/"):
+                connect = f"/api/auth/{self.provider}/login"
+            return AuthError(f"not connected -- connect Google in the workspace first: "
+                             f"{self.base}{connect}", 404)
+        return AuthError(f"the workspace token endpoint answered {code}: "
+                         f"{detail or 'no detail'}", code)
+
+    def _fetch(self) -> None:
+        req = urllib.request.Request(
+            self.url, method="GET",
+            headers={"Authorization": "Bearer " + self._bearer(),
+                     "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=30.0) as resp:
+                raw = resp.read()
+        except urllib.error.HTTPError as exc:
+            try:
+                body = exc.read() or b""
+            except (OSError, AttributeError):
+                body = b""
+            raise self._refused(exc.code, body) from None
+        except urllib.error.URLError as exc:
+            raise AuthError(f"workspace {self.base} unreachable: {exc.reason}") from None
+        try:
+            j = json.loads(raw or b"{}")
+        except ValueError:
+            raise AuthError("the workspace token endpoint answered non-JSON") from None
+        tok = str((j.get("access_token") if isinstance(j, dict) else "") or "")
+        if not tok:
+            raise AuthError("the workspace token endpoint returned no access_token")
+        exp = j.get("expires_at")
+        try:
+            self._exp = float(exp) if exp is not None else self._now() + self._ttl
+        except (TypeError, ValueError):
+            self._exp = self._now() + self._ttl
+        self._tok = tok
+        sc = j.get("scopes")
+        self._scopes = {str(s) for s in sc} if isinstance(sc, list) else None
+
+    def token(self) -> str:
+        if not self._tok or self._exp - EXPIRY_SKEW <= self._now():
+            self._fetch()
+        return str(self._tok)
+
+    def force_refresh(self) -> bool:
+        self._tok = None
+        self._exp = 0.0
+        return True
+
+    def granted_scopes(self) -> Optional[Set[str]]:
+        return set(self._scopes) if self._scopes is not None else None
+
+    def describe(self) -> Dict[str, Any]:
+        return {"mode": self.mode, "workspace": self.base, "provider": self.provider,
+                "bearer_env": self.bearer_env or None,
+                "bearer_source": (f"env:{self.bearer_env}" if self.bearer_env
+                                  else "adk login (~/.aither/auth.json)"),
+                "bearer_set": bool(os.environ.get(self.bearer_env, "").strip()
+                                   if self.bearer_env else adk_login_token()),
+                "access_token": mask(self._tok)}
+
+
 # --------------------------------------------------------------------------- glue
 
 
@@ -599,6 +775,9 @@ def load_token_source(profile: "str | None" = None) -> TokenSource:
     if mode == "token":
         return CommandTokenSource(token=os.environ.get("AWSUITE_ACCESS_TOKEN", ""),
                                   command=data.get("token_cmd", ""))
+    if mode == "workspace":
+        return WorkspaceTokenSource(data.get("base", ""), data.get("bearer_env", ""),
+                                    data.get("provider") or "google")
     raise ConfigError(f"profile {name!r} has unknown mode {mode!r}")
 
 
@@ -607,14 +786,27 @@ def login(profile: str, mode: str = "oauth", *, services: "List[str] | None" = N
           open_browser: bool = True, key_path: str = "", subject: str = "",
           token_cmd: str = "", printer: Callable[[str], None] = print,
           opener: Optional[Callable[[str], Any]] = None,
-          timeout: float = 300.0) -> Dict[str, Any]:
+          timeout: float = 300.0, workspace: str = "", bearer_env: str = "",
+          provider: str = "google") -> Dict[str, Any]:
     """Create or extend a profile. Returns the masked status.
 
     oauth logins are incremental: scopes already granted to the profile are kept
-    and the new ones are added.
+    and the new ones are added. workspace logins store only the workspace URL,
+    the NAME of the bearer variable and the provider -- never a credential.
     """
     if mode not in MODES:
         raise ConfigError(f"unknown mode {mode!r}; choose from {', '.join(MODES)}")
+    if mode == "workspace":
+        base = check_workspace_base(workspace)
+        if bearer_env and not _env_name_ok(bearer_env):
+            raise ConfigError(f"--bearer-env must be an environment variable NAME, "
+                              f"got {bearer_env!r}")
+        if provider not in WORKSPACE_PROVIDERS:
+            raise ConfigError(f"workspace mode supports --provider "
+                              f"{', '.join(WORKSPACE_PROVIDERS)}, got {provider!r}")
+        save_profile(profile, {"mode": "workspace", "base": base, "bearer_env": bearer_env,
+                               "provider": provider})
+        return status(profile)
     svcs = services if services is not None else _scopes.parse_services(None)
     wanted = _scopes.scopes_for(svcs, write=write)
     existing = load_profile(profile) or {}
@@ -675,6 +867,11 @@ def status(profile: "str | None" = None) -> Dict[str, Any]:
                     "expired": float(data.get("expires_at") or 0) <= time.time()})
     elif out["mode"] == "service-account":
         out.update({"key_path": data.get("key_path"), "subject": data.get("subject")})
+    elif out["mode"] == "workspace":
+        env = str(data.get("bearer_env") or "")
+        out.update({"workspace": data.get("base"), "bearer_env": env or None,
+                    "bearer": mask(os.environ.get(env, "").strip() or None) if env else "(none)",
+                    "scopes_granted": None, "missing_scopes": []})
     else:
         out["token_cmd"] = data.get("token_cmd") or None
     return out

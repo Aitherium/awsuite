@@ -66,13 +66,14 @@ input schemas the MCP server and the toolpack both serve.
   suite_mail_send         W  suite_calendar_create  W  suite_directory_users
 ```
 
-## Three ways to authenticate
+## Four ways to authenticate
 
 | mode | for | how |
 |---|---|---|
 | `oauth` (default) | a person's own account | loopback flow with PKCE (S256) on `127.0.0.1`; `--no-browser` prints the URL only. Client from `--client-secret` or `AWSUITE_GOOGLE_CLIENT_ID` / `AWSUITE_GOOGLE_CLIENT_SECRET` |
 | `service-account` | a Workspace admin automating for users | `--mode service-account --key key.json --subject user@domain` (domain-wide delegation; needs `awsuite[sa]`) |
 | `token` | a platform that already holds the grant | `AWSUITE_ACCESS_TOKEN`, or `--mode token --token-cmd "<command printing a token>"` |
+| `workspace` | you already connected Google in an Aither workspace | `--workspace https://<portal> --bearer-env NAME` (below) |
 
 `token` mode is the seam for hosting platforms: the platform hands the agent a
 short-lived access token and the brick never stores a refresh credential.
@@ -86,6 +87,37 @@ awsuite auth status      # who, which scopes, granted vs requested
 awsuite auth scopes      # the service -> scope map
 awsuite auth logout      # revoke and delete
 ```
+
+## Use your workspace's Google connection
+
+If your organisation runs an Aither workspace and you have connected Google
+there, awsuite can use that same connection: no Google Cloud project, no second
+OAuth client, no refresh token on your machine.
+
+```bash
+adk login                         # once: your Aither sign-in (pip install awdk)
+awsuite auth login --workspace https://workspace.example.com
+awsuite mail search "is:unread newer_than:1d"
+```
+
+- With no `--bearer-env`, awsuite sends the Aither sign-in `adk login` saved
+  (`~/.aither/auth.json`). To use another credential, put it in an environment
+  variable and pass `--bearer-env NAME`.
+- The profile stores the workspace URL, the provider and (if given) the NAME of
+  the variable -- never the bearer or a Google token.
+- The workspace accepts this route only with an `Authorization` bearer and no
+  browser cookies, so a web page cannot use it to read your token.
+- Each fetch calls `GET <workspace>/api/connectors/google/token` with your bearer
+  and keeps the answer in memory only, until 60 s before it expires. The
+  workspace hands back your own token, never anyone else's.
+- An admin must first allow it: Connectors -> Google Workspace -> "Allow members
+  to use this connection from their CLI/agents". Until then the call fails with
+  an `AuthError` that says so.
+- `not connected` means you have not connected Google in the workspace yet; the
+  error prints the link that starts it.
+- Gmail is available only if the workspace admin ticked "Include Gmail" and you
+  re-connected afterwards; otherwise mail tools raise a `ScopeError`.
+- `https://` is required, except to `127.0.0.1` / `localhost`.
 
 ## Errors an agent can act on
 
@@ -140,6 +172,7 @@ argv or shell history; plain `http://` is refused except to loopback. Without
 
 ```bash
 awsuite doctor          # python, token-file perms, scopes granted vs requested,
+                        # workspace-mode bearer variable set or not,
                         # token endpoint reachable within 5 s
 awsuite --self-test     # offline proof: PKCE (RFC 7636 vector), table parity across
                         # MCP/toolpack/CLI, dry-run gating, masking, MCP over a pipe

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "awsuite"
-version = "0.1.0"
+version = "0.1.1"
 description = "Let an agent use a Google Workspace -- Gmail, Drive, Calendar, Docs, Sheets, Directory -- from a CLI, an MCP server, an agent toolpack and skills, with every write gated behind an explicit confirm."
 readme = "README.md"
 requires-python = ">=3.10"

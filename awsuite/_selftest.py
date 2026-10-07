@@ -106,6 +106,19 @@ def _checks(check: Callable[[bool, str], None]) -> None:
     check(all(secret not in str(x) for x in md.values()) and md["mode"] == "o",
           "masked() hides every secret field and keeps the rest")
 
+    # 4b. workspace mode: https rule, refusals an agent can act on, bearer never shown
+    try:
+        auth.check_workspace_base("http://workspace.example.com")
+        check(False, "workspace mode refuses plain http to a non-loopback host")
+    except auth.ConfigError:
+        check(auth.check_workspace_base("http://127.0.0.1:8900/") == "http://127.0.0.1:8900",
+              "workspace mode: https required except to loopback")
+    ws = auth.WorkspaceTokenSource("https://workspace.example.com", "AWSUITE_SELFTEST_UNSET")
+    nf = str(ws._refused(404, b'{"detail":"not connected","connect_url":"/api/auth/google/login"}'))
+    fb = str(ws._refused(403, b'{"detail":"token hand-off is disabled"}'))
+    check("https://workspace.example.com/api/auth/google/login" in nf and "admin" in fb,
+          "workspace 404 names the connect URL; 403 says an admin must enable hand-off")
+
     # 5. scope pre-flight refuses offline, naming the scope
     class _Ro(auth.TokenSource):
         def token(self) -> str:

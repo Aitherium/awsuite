@@ -1,6 +1,6 @@
 id: awsuite
 name: awsuite — Google Workspace for agents
-version: 0.1.0
+version: 0.1.1
 description: >-
   Gmail, Drive, Calendar, Docs, Sheets and the Admin Directory as suite_* tools.
   Read tools run directly; every write tool (send, draft, create, append, upload)
