@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "awsuite"
+version = "0.1.0"
+description = "Let an agent use a Google Workspace -- Gmail, Drive, Calendar, Docs, Sheets, Directory -- from a CLI, an MCP server, an agent toolpack and skills, with every write gated behind an explicit confirm."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+# Stdlib only at runtime (urllib, json, http.server, hashlib, base64, secrets).
+# A brick that holds someone's mailbox credentials should have the smallest
+# supply chain it can; the one optional extra below is loaded lazily and only
+# for service-account JWT signing.
+dependencies = []
+
+[project.optional-dependencies]
+# RS256 signing for service-account (domain-wide delegation) mode. Absent, that
+# mode REFUSES with an error naming this extra; oauth and token modes never need it.
+sa = ["cryptography>=41"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+awsuite = "awsuite.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Aitherium/awsuite"
+Documentation = "https://github.com/Aitherium/awsuite#readme"
+Repository = "https://github.com/Aitherium/awsuite.git"
+Issues = "https://github.com/Aitherium/awsuite/issues"
+
+[tool.setuptools]
+packages = ["awsuite", "awsuite.providers", "awsuite.toolpack"]
+license-files = ["LICENSE"]
+
+[tool.setuptools.package-data]
+# `.toolpack.yaml` is a dotfile: a `*` glob never matches it, so it is named.
+"awsuite.toolpack" = [".toolpack.yaml"]
+awsuite = ["skills/*/SKILL.md"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
