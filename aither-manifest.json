@@ -1,26 +1,27 @@
 {
   "schemaVersion": "1",
   "name": "awsuite",
-  "description": "Let an agent use a Google Workspace, with every write gated behind an explicit confirm.",
+  "description": "Your Google Workspace as agent tools, and no write happens without a yes.",
   "url": "https://aitherium.github.io/awsuite/",
   "repository": "https://github.com/Aitherium/awsuite",
   "kind": "tool",
-  "status": "planned",
-  "adopt": "Read your Gmail, Drive, Calendar, Docs and Sheets from a CLI or an MCP client, with writes only on explicit confirm.",
+  "status": "no-pages",
+  "adopt": "Sign in with your own Google OAuth client and search your inbox from the CLI.",
   "pairs_with": [
-    "awmail",
     "awdk",
-    "awsh"
+    "awsh",
+    "awpack",
+    "awskills"
   ],
   "includes": [],
   "metrics": {
     "files": {
-      "value": 43,
-      "as_of": "2026-10-07T10:36:37-07:00"
+      "value": 37,
+      "as_of": "2026-10-07T13:57:39-07:00"
     },
     "tests": {
-      "value": 6,
-      "as_of": "2026-10-07T10:36:37-07:00"
+      "value": 8,
+      "as_of": "2026-10-07T13:57:39-07:00"
     }
   }
 }

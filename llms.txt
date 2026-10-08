@@ -1,0 +1,30 @@
+# awsuite
+
+> Your Google Workspace as agent tools, and no write happens without a yes.
+
+Giving an agent your mail, files and calendar is one OAuth consent away, and after that nothing distinguishes "read my inbox" from "reply to everyone". The agent also needs the same tools in every harness it runs in, not a different integration per surface.
+
+## Install
+
+```
+pip install awsuite
+```
+
+## Use it in 30 seconds
+
+Sign in with your own Google OAuth client and search your inbox from the CLI.
+
+## Composes with
+
+- [awdk](https://aitherium.github.io/awdk/) — Build AI agent fleets — 3 lines, any backend, local or cloud.
+- [awsh](https://aitherium.github.io/awsh/) — Your terminal answers you -- type a question where a command would go.
+- [awpack](https://aitherium.github.io/awpack/) — First-party agent packs — the ones we build, versioned and installable on their own.
+- [awskills](https://aitherium.github.io/awskills/) — Portable agent skills — self-contained procedures an agent loads on demand.
+
+## Where it lives
+
+- Repo: https://github.com/Aitherium/awsuite
+
+This repository is mirrored from the AitherOS monorepo by `.github/workflows/sync-awsuite.yml`; hand edits made here are overwritten on the next sync — change the source instead.
+
+Everything Aitherium, in one file for agents: https://aitherium.com/llms.txt
