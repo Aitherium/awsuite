@@ -23,7 +23,15 @@ import sys
 #: package cannot read the registry, and a doctor that guessed at the family
 #: would go stale in silence. Regenerate to update.
 SELF = 'awsuite'
-FAMILY = ['awask', 'awavatar', 'awbac', 'awbrain', 'awbrowse', 'awcams', 'awclassify', 'awdecide', 'awdeck', 'awdelphi', 'awdit', 'awembed', 'awevolve', 'awfind', 'awflow', 'awfocus', 'awgit', 'awgraph', 'awgym', 'awiam', 'awkno', 'awm', 'awmail', 'awmine', 'awnboard', 'awnest', 'awnet', 'awnode', 'awpool', 'awpredict', 'awprism', 'awprove', 'awreason', 'awrecover', 'awrecurse', 'awrelay', 'awrena', 'awrepl', 'awreport', 'awresearch', 'awrise', 'awrouter', 'awrtifact', 'awrun', 'awscope', 'awscreen', 'awseal', 'awsettings', 'awshare', 'awsprite', 'awstorage', 'awswarm', 'awtax', 'awtoll', 'awtunnel', 'awvision', 'awvoice', 'awwall', 'gawbbonet']
+FAMILY = [
+    'awask', 'awavatar', 'awbac', 'awbrain', 'awbrowse', 'awcams', 'awclassify', 'awdecide',
+    'awdeck', 'awdelphi', 'awdit', 'awembed', 'awevolve', 'awfind', 'awflow', 'awfocus', 'awgit',
+    'awgraph', 'awgym', 'awiam', 'awkno', 'awm', 'awmail', 'awmine', 'awnboard', 'awnest', 'awnet',
+    'awplay', 'awpool', 'awpredict', 'awprism', 'awprove', 'awreason', 'awrecover', 'awrecurse',
+    'awrelay', 'awrena', 'awrepl', 'awreport', 'awresearch', 'awrise', 'awrouter', 'awrtifact',
+    'awrun', 'awscope', 'awscreen', 'awseal', 'awsettings', 'awshare', 'awsprite', 'awstorage',
+    'awswarm', 'awtax', 'awtoll', 'awtunnel', 'awvision', 'awvoice', 'awwall', 'gawbbonet',
+]
 PAIRS_WITH = ['adk']
 
 #: This brick's OWN config, read out of its source at generation time.
@@ -33,7 +41,11 @@ PAIRS_WITH = ['adk']
 #: platform-wide vars it also touches would be noise, and a doctor that floods
 #: gets ignored.
 ENV_REQUIRED = []
-ENV_OPTIONAL = ['AWSUITE_ACCESS_TOKEN', 'AWSUITE_ADK_AUTH_FILE', 'AWSUITE_GOOGLE_CLIENT_ID', 'AWSUITE_GOOGLE_CLIENT_SECRET', 'AWSUITE_HOME', 'AWSUITE_PROFILE', 'AWSUITE_TIMEZONE', 'AWSUITE_TOKEN_CMD']
+ENV_OPTIONAL = [
+    'AWSUITE_ACCESS_TOKEN', 'AWSUITE_ADK_AUTH_FILE', 'AWSUITE_GOOGLE_CLIENT_ID',
+    'AWSUITE_GOOGLE_CLIENT_SECRET', 'AWSUITE_HOME', 'AWSUITE_PROFILE', 'AWSUITE_TIMEZONE',
+    'AWSUITE_TOKEN_CMD',
+]
 
 
 def _installed(mod: str) -> "str | None":
