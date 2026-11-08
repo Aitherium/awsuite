@@ -24,6 +24,8 @@ Sign in with your own Google OAuth client and search your inbox from the CLI.
 ## Where it lives
 
 - Repo: https://github.com/Aitherium/awsuite
+- Docs: https://aitherium.github.io/awsuite/
+- Manifest (keys + the one-line adoption story): https://aitherium.github.io/awsuite/aither-manifest.json
 
 This repository is mirrored from the AitherOS monorepo by `.github/workflows/sync-awsuite.yml`; hand edits made here are overwritten on the next sync — change the source instead.
 
