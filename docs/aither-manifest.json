@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1",
+  "name": "awsuite",
+  "description": "Your Google Workspace as agent tools, and no write happens without a yes.",
+  "url": "https://aitherium.github.io/awsuite/",
+  "repository": "https://github.com/Aitherium/awsuite",
+  "kind": "tool",
+  "status": "no-pages",
+  "adopt": "Sign in with your own Google OAuth client and search your inbox from the CLI.",
+  "pairs_with": [
+    "awdk",
+    "awsh",
+    "awpack",
+    "awskills"
+  ],
+  "includes": [],
+  "metrics": {
+    "files": {
+      "value": 44,
+      "as_of": "2026-11-08T07:11:35-08:00"
+    },
+    "tests": {
+      "value": 8,
+      "as_of": "2026-11-08T07:11:35-08:00"
+    }
+  }
+}
